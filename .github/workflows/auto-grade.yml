@@ -19,30 +19,29 @@ jobs:
 
       # Use Node with cache if lockfiles exist
       - name: Use Node (cache)
-        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') != '' }}
+        if: ${{ hashFiles('5-4-react-rendering-lists/package-lock.json', '5-4-react-rendering-lists/npm-shrinkwrap.json', '5-4-react-rendering-lists/yarn.lock') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: |
-            package-lock.json
-            npm-shrinkwrap.json
-            yarn.lock
-            scripts/**/package-lock.json
-            scripts/**/npm-shrinkwrap.json
-            scripts/**/yarn.lock
+            5-4-react-rendering-lists/package-lock.json
+            5-4-react-rendering-lists/npm-shrinkwrap.json
+            5-4-react-rendering-lists/yarn.lock
 
       # Fallback if no lockfile found
       - name: Use Node (no cache)
-        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') == '' }}
+        if: ${{ hashFiles('5-4-react-rendering-lists/package-lock.json', '5-4-react-rendering-lists/npm-shrinkwrap.json', '5-4-react-rendering-lists/yarn.lock') == '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies (if any)
         run: |
-          if [ -f package.json ]; then
+          if [ -f 5-4-react-rendering-lists/package.json ]; then
+            cd 5-4-react-rendering-lists
             (npm ci || npm install)
+            cd ..
           fi
 
       # Set default due date (Riyadh time) or allow manual override via workflow_dispatch
@@ -60,28 +59,25 @@ jobs:
           SUBMITTED_AT: ${{ github.event.head_commit.timestamp }}
         run: |
           set -e
+          GRADER_PATH="5-4-react-rendering-lists/scripts/grade.cjs"
+          CONFIG_PATH="5-4-react-rendering-lists/grade.yml"
 
-          # Resolve grader path
-          if [ -f "scripts/grade.cjs" ]; then
-            GRADER_PATH="scripts/grade.cjs"
-          elif [ -f "grade.cjs" ]; then
-            GRADER_PATH="grade.cjs"
-          else
-            echo "❌ Could not find grade.cjs (expected scripts/grade.cjs or grade.cjs)" >&2
+          if [ ! -f "$GRADER_PATH" ]; then
+            echo "❌ Could not find grade.cjs at $GRADER_PATH" >&2
             exit 1
           fi
 
-          # Ensure config file exists (expected at repo root as grade.yml)
-          if [ ! -f "grade.yml" ]; then
-            echo "❌ grade.yml not found at repo root. Add it or pass --config to the script path you use." >&2
+          if [ ! -f "$CONFIG_PATH" ]; then
+            echo "❌ Could not find grade.yml at $CONFIG_PATH" >&2
             exit 1
           fi
 
-          # Run the grader (prefer the commit timestamp when available)
+          cd 5-4-react-rendering-lists
+
           if [ -n "$SUBMITTED_AT" ]; then
-            node "$GRADER_PATH" --root . --config grade.yml --submittedAt "$SUBMITTED_AT" | tee grade-console.txt
+            node scripts/grade.cjs --root . --config grade.yml --submittedAt "$SUBMITTED_AT" | tee grade-console.txt
           else
-            node "$GRADER_PATH" --root . --config grade.yml | tee grade-console.txt
+            node scripts/grade.cjs --root . --config grade.yml | tee grade-console.txt
           fi
 
       - name: Upload grading artifacts
@@ -89,15 +85,15 @@ jobs:
         with:
           name: grade
           path: |
-            grade-report.md
-            grade-report.json
-            grade-console.txt
+            5-4-react-rendering-lists/grade-report.md
+            5-4-react-rendering-lists/grade-report.json
+            5-4-react-rendering-lists/grade-console.txt
 
       - name: Post summary
         if: always()
         run: |
-          if [ -f grade-report.md ]; then
-            cat grade-report.md >> $GITHUB_STEP_SUMMARY
+          if [ -f 5-4-react-rendering-lists/grade-report.md ]; then
+            cat 5-4-react-rendering-lists/grade-report.md >> $GITHUB_STEP_SUMMARY
           else
             echo "No grade report produced." >> $GITHUB_STEP_SUMMARY
           fi
