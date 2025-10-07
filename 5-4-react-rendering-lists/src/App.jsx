@@ -7,17 +7,28 @@ import "./index.css";
    🧩 STUDY BUDDY LAB — MASTER TODO ROADMAP
    =========================================================
 
-   Welcome to the Study Buddy React Lab!
-
-   In this single comment block, you’ll find:
-   - All 4 TODOs you must complete
-   - The exact file + line range where you’ll code
-   - Hints for each step
-
-   Each task builds on the previous one.
-   Read carefully and complete them in order.
-
+   🛠️ SETUP INSTRUCTIONS
    ---------------------------------------------------------
+   1️⃣ Open your VS Code terminal.
+   2️⃣ Navigate into the lab directory:
+         cd 5-4-react-rendering-lists
+   3️⃣ Install dependencies:
+         npm i
+         (or)
+         npm install
+   4️⃣ Start the development server:
+         npm run dev
+   ⚠️ If you get an error like “running scripts is disabled” or
+      the system blocks npm commands, run this first:
+         Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+      Then re-run your npm commands.
+
+   Once the app runs successfully, open it in the browser
+   and start implementing the tasks below.
+
+   ⚠️ To get good marks in the lab, follow the instructions strictly, otherwise you may lose the marks.
+
+   =========================================================
    📘 TASK 1 — Render Course Components
    File: src/App.jsx  (YOU ARE HERE)
    ---------------------------------------------------------
@@ -150,6 +161,7 @@ import "./index.css";
    - You’ve practiced .map(), keys, conditional rendering, and React state!
    =========================================================
 */
+
 
 export default function App() {
   const [courses, setCourses] = useState(sampleCourses);
