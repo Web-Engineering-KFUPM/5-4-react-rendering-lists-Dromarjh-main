@@ -1,0 +1,103 @@
+name: Auto Grade
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      due_date:
+        description: "Override ISO due date/time (default is 2025-10-08T23:59:59+03:00)"
+        required: false
+        default: ""
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Use Node with cache if lockfiles exist
+      - name: Use Node (cache)
+        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            npm-shrinkwrap.json
+            yarn.lock
+            scripts/**/package-lock.json
+            scripts/**/npm-shrinkwrap.json
+            scripts/**/yarn.lock
+
+      # Fallback if no lockfile found
+      - name: Use Node (no cache)
+        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (if any)
+        run: |
+          if [ -f package.json ]; then
+            (npm ci || npm install)
+          fi
+
+      # Set default due date (Riyadh time) or allow manual override via workflow_dispatch
+      - name: Set Due Date env
+        run: |
+          if [ -n "${{ github.event.inputs.due_date }}" ]; then
+            echo "DUE_DATE=${{ github.event.inputs.due_date }}" >> $GITHUB_ENV
+          else
+            echo "DUE_DATE=2025-10-08T23:59:59+03:00" >> $GITHUB_ENV
+          fi
+
+      - name: Run grader
+        env:
+          DUE_DATE: ${{ env.DUE_DATE }}
+          SUBMITTED_AT: ${{ github.event.head_commit.timestamp }}
+        run: |
+          set -e
+
+          # Resolve grader path
+          if [ -f "scripts/grade.cjs" ]; then
+            GRADER_PATH="scripts/grade.cjs"
+          elif [ -f "grade.cjs" ]; then
+            GRADER_PATH="grade.cjs"
+          else
+            echo "❌ Could not find grade.cjs (expected scripts/grade.cjs or grade.cjs)" >&2
+            exit 1
+          fi
+
+          # Ensure config file exists (expected at repo root as grade.yml)
+          if [ ! -f "grade.yml" ]; then
+            echo "❌ grade.yml not found at repo root. Add it or pass --config to the script path you use." >&2
+            exit 1
+          fi
+
+          # Run the grader (prefer the commit timestamp when available)
+          if [ -n "$SUBMITTED_AT" ]; then
+            node "$GRADER_PATH" --root . --config grade.yml --submittedAt "$SUBMITTED_AT" | tee grade-console.txt
+          else
+            node "$GRADER_PATH" --root . --config grade.yml | tee grade-console.txt
+          fi
+
+      - name: Upload grading artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grade
+          path: |
+            grade-report.md
+            grade-report.json
+            grade-console.txt
+
+      - name: Post summary
+        if: always()
+        run: |
+          if [ -f grade-report.md ]; then
+            cat grade-report.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No grade report produced." >> $GITHUB_STEP_SUMMARY
+          fi
