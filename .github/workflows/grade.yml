@@ -1,0 +1,118 @@
+name: Auto Grade
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      due_date:
+        description: "Override ISO due date/time (default is 2025-10-08T23:59:59+03:00)"
+        required: false
+        default: ""
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Use Node with cache if lockfiles exist
+      - name: Use Node (cache)
+        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            npm-shrinkwrap.json
+            yarn.lock
+            scripts/**/package-lock.json
+            scripts/**/npm-shrinkwrap.json
+            scripts/**/yarn.lock
+
+      # Fallback if no lockfile found
+      - name: Use Node (no cache)
+        if: ${{ hashFiles('package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'scripts/**/package-lock.json', 'scripts/**/npm-shrinkwrap.json', 'scripts/**/yarn.lock') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set Due Date Env
+        run: |
+          if [ -n "${{ github.event.inputs.due_date }}" ]; then
+            echo "DUE_DATE=${{ github.event.inputs.due_date }}" >> $GITHUB_ENV
+          else
+            echo "DUE_DATE=2025-10-08T23:59:59+03:00" >> $GITHUB_ENV
+          fi
+
+      - name: Install dependencies (if any)
+        run: |
+          if [ -f package.json ]; then
+            (npm ci || npm install)
+          fi
+          if [ -f 5-3-react-event-handling/package.json ]; then
+            pushd 5-3-react-event-handling
+            (npm ci || npm install)
+            popd
+          fi
+
+      - name: Write grading.config.yml (LF endings)
+        run: |
+          printf '%s\n' \
+            '# Study Buddy Lab – Grading Config' \
+            'deadline: '"$DUE_DATE" \
+            'timezone: Asia/Riyadh' \
+            'requireFiles: src/App.jsx,src/components/CourseCard.jsx,src/components/TaskItem.jsx,src/components/DueBadge.jsx' \
+            > grading.config.yml
+
+      - name: Run grader
+        env:
+          DUE_DATE: ${{ env.DUE_DATE }}
+          SUBMITTED_AT: ${{ github.event.head_commit.timestamp }}
+        run: |
+          set -e
+          GRADER_PATH=""
+          if [ -f "scripts/grade.cjs" ]; then
+            GRADER_PATH="scripts/grade.cjs"
+          elif [ -f "grade.cjs" ]; then
+            GRADER_PATH="grade.cjs"
+          elif [ -f "5-3-react-event-handling/script/grade.cjs" ]; then
+            GRADER_PATH="5-3-react-event-handling/script/grade.cjs"
+          else
+            echo "No grader found at expected locations." >&2
+            exit 1
+          fi
+
+          if [ -n "$SUBMITTED_AT" ]; then
+            node "$GRADER_PATH" --root . --config grading.config.yml --submittedAt "$SUBMITTED_AT" | tee grade-console.txt
+          else
+            node "$GRADER_PATH" --root . --config grading.config.yml | tee grade-console.txt
+          fi
+
+          # Copy reports if written elsewhere
+          for p in \
+            5-3-react-event-handling/script/grade-report.md \
+            5-3-react-event-handling/script/grade-report.json; do
+            if [ -f "$p" ]; then
+              cp "$p" .
+            fi
+          done
+
+      - name: Upload grading artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grade
+          path: |
+            grade-report.md
+            grade-report.json
+            grade-console.txt
+
+      - name: Post summary
+        if: always()
+        run: |
+          if [ -f grade-report.md ]; then
+            cat grade-report.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No grade report produced." >> $GITHUB_STEP_SUMMARY
+          fi
